@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>パワー指標計算アプリ</title>
+  <style>
+    body { font-family: sans-serif; padding: 1em; max-width: 600px; margin: auto; }
+    input, button, select {
+      width: 100%; padding: 10px; margin-top: 5px; font-size: 1em; box-sizing: border-box;
+    }
+    label { margin-top: 10px; display: block; }
+    .radio-group { display: flex; justify-content: space-between; }
+    .result { margin-top: 1em; font-weight: bold; color: green; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>パワー指標（W）計算アプリ</h1>
+
+  <label>モード選択:</label>
+  <select id="modeSelect" onchange="switchMode()">
+    <option value="pc">PC版</option>
+    <option value="mobile">スマホ版</option>
+  </select>
+
+  <label>測定日:</label>
+  <input type="date" id="date">
+
+  <label>参加者ID:</label>
+  <input type="text" id="id">
+
+  <label>測定側:</label>
+  <div class="radio-group">
+    <label><input type="radio" name="side" value="右脚" checked>右脚</label>
+    <label><input type="radio" name="side" value="左脚">左脚</label>
+  </div>
+
+  <label>転子果長（cm）:</label>
+  <input type="number" id="hipLength" step="0.1">
+
+  <label>椅子の高さ（cm）:</label>
+  <input type="number" id="chairHeight" step="0.1">
+
+  <label>体重（kg）:</label>
+  <input type="number" id="weight" step="0.1">
+
+  <label>回数（回）:</label>
+  <input type="number" id="reps">
+
+  <label>所要時間（秒）:</label>
+  <input type="number" id="time" step="0.1">
+
+  <button onclick="addRecord()">計算する</button>
+  <button id="downloadBtn" class="hidden" onclick="downloadCSV()">CSVダウンロード（PC版）</button>
+  <button id="sendToSheetBtn" class="hidden" onclick="sendToGoogleSheet()">Google Sheetsに送信（スマホ版）</button>
+
+  <div class="result" id="result"></div>
+
+  <script>
+    let records = [];
+
+    window.onload = () => {
+      document.getElementById("date").value = new Date().toISOString().split("T")[0];
+      switchMode(); // 初期モード反映
+    };
+
+    function switchMode() {
+      const mode = document.getElementById("modeSelect").value;
+      document.getElementById("downloadBtn").classList.toggle("hidden", mode !== "pc");
+      document.getElementById("sendToSheetBtn").classList.toggle("hidden", mode !== "mobile");
+    }
+
+    function addRecord() {
+      const date = document.getElementById('date').value;
+      const id = document.getElementById('id').value.trim();
+      const side = document.querySelector('input[name="side"]:checked')?.value;
+      const hipLength = parseFloat(document.getElementById('hipLength').value);
+      const chairHeight = parseFloat(document.getElementById('chairHeight').value);
+      const weight = parseFloat(document.getElementById('weight').value);
+      const reps = parseFloat(document.getElementById('reps').value);
+      const time = parseFloat(document.getElementById('time').value);
+
+      if (!date || !id || !side || isNaN(hipLength) || isNaN(chairHeight) || isNaN(weight) || isNaN(reps) || isNaN(time) || time <= 0) {
+        document.getElementById('result').textContent = 'すべての項目を正しく入力してください。';
+        return;
+      }
+
+      const g = 9.8;
+      const heightDiff = (hipLength - chairHeight) / 100;
+      const power = (heightDiff * weight * g * reps) / time;
+
+      const record = [date, id, side, hipLength, chairHeight, weight, reps, time, power.toFixed(2)];
+      records.push(record);
+
+      document.getElementById('result').textContent = `パワー指標: ${power.toFixed(2)} W を記録しました。`;
+    }
+
+    function downloadCSV() {
+      if (records.length === 0) return alert("データがありません。");
+
+      const header = ["日付", "ID", "測定側", "転子果長", "椅子高さ", "体重", "回数", "時間", "パワー"];
+      const csv = [header.join(",")].concat(records.map(row => row.join(",")));
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const blob = new Blob([bom, csv.join("\n")], { type: "text/csv" });
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "power_data.csv";
+      link.click();
+    }
+
+    function sendToGoogleSheet() {
+      if (records.length === 0) return alert("データがありません。");
+
+      fetch("https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbwPigok_VjO6PAIn8i9ouqKPuy0pH4Cz3nfgJtT0eQJL9pOz8BaCelYFe-f3LZai8Ek/exec/exec", {
+        method: "POST",
+        body: JSON.stringify({ data: records }),
+        headers: { "Content-Type": "application/json" }
+      })
+      .then(res => res.text())
+      .then(msg => {
+        alert("Google Sheetsに送信完了！");
+        records = [];
+      })
+      .catch(err => alert("送信に失敗しました: " + err));
+    }
+  </script>
+</body>
+</html>
